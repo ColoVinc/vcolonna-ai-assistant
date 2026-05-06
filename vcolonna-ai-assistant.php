@@ -44,7 +44,6 @@ spl_autoload_register( function( $class ) {
         'Vcai_Chat'          => VCAI_PLUGIN_DIR . 'admin/class-chat.php',
         'Vcai_Tools'         => VCAI_PLUGIN_DIR . 'includes/class-tools.php',
         'Vcai_Knowledge'     => VCAI_PLUGIN_DIR . 'includes/class-knowledge.php',
-        'Vcai_Components'    => VCAI_PLUGIN_DIR . 'includes/class-components.php',
     ];
 
     if ( isset( $map[$class] ) && file_exists( $map[$class] ) ) {
@@ -77,24 +76,10 @@ function vcai_check_version() {
     $installed = get_option( 'vcai_version', '0' );
     if ( version_compare( $installed, VCAI_VERSION, '<' ) ) {
         vcai_create_tables();
-        vcai_preload_docs();
         update_option( 'vcai_version', VCAI_VERSION );
     }
 }
 add_action( 'plugins_loaded', 'vcai_check_version', 5 );
-
-function vcai_preload_docs() {
-    $docs_dir = VCAI_PLUGIN_DIR . 'docs/';
-    if ( ! is_dir( $docs_dir ) ) return;
-
-    foreach ( glob( $docs_dir . '*.md' ) as $file ) {
-        $name    = 'doc:' . basename( $file, '.md' );
-        $content = file_get_contents( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
-        if ( $content ) {
-            Vcai_Knowledge::add_document( $name, $content );
-        }
-    }
-}
 
 function vcai_create_tables() {
     global $wpdb;
@@ -147,18 +132,6 @@ function vcai_create_tables() {
         FULLTEXT KEY content_ft (content)
     ) $charset;" );
 
-    // Tabella componenti
-    dbDelta( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}vcai_components (
-        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-        slug VARCHAR(100) NOT NULL,
-        name VARCHAR(255) NOT NULL,
-        editor VARCHAR(50) NOT NULL,
-        status VARCHAR(20) NOT NULL DEFAULT 'active',
-        error_message TEXT NULL,
-        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (id),
-        UNIQUE KEY slug (slug)
-    ) $charset;" );
 }
 
 function vcai_deactivate() {
