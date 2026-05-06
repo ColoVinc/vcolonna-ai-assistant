@@ -27,8 +27,6 @@ class Vcai_Admin {
         add_action( 'wp_ajax_vcai_delete_knowledge', [ $this, 'ajax_delete_knowledge' ] );
         add_action( 'wp_ajax_vcai_index_posts', [ $this, 'ajax_index_posts' ] );
         add_action( 'wp_ajax_vcai_generate_alt', [ $this, 'ajax_generate_alt' ] );
-        add_action( 'wp_ajax_vcai_toggle_component', [ $this, 'ajax_toggle_component' ] );
-        add_action( 'wp_ajax_vcai_delete_component', [ $this, 'ajax_delete_component' ] );
         add_filter( 'attachment_fields_to_edit', [ $this, 'add_alt_button_to_media' ], 10, 2 );
     }
 
@@ -97,15 +95,6 @@ class Vcai_Admin {
             'manage_options',
             'vcai-knowledge',
             [ $this, 'render_knowledge_page' ]
-        );
-
-        add_submenu_page(
-            'vcai',
-            'Componenti',
-            'Componenti',
-            'manage_options',
-            'vcai-components',
-            [ $this, 'render_components_page' ]
         );
     }
 
@@ -202,7 +191,7 @@ class Vcai_Admin {
 
         // Chart.js per la pagina log
         if ( strpos( $hook, 'vcai-logs' ) !== false ) {
-            wp_enqueue_script( 'chartjs', VCAI_PLUGIN_URL . 'assets/vendor/chart.min.js', [], '4.4.7', true );
+            wp_enqueue_script( 'chartjs', VCAI_PLUGIN_URL . 'assets/vendor/chart.min.js', [], '4.5.1', true );
         }
 
         // Bootstrap solo nelle pagine VColonna AI (settings, logs, knowledge)
@@ -250,6 +239,17 @@ class Vcai_Admin {
         $stats       = Vcai_Logger::get_stats();
         $daily_stats    = Vcai_Logger::get_daily_stats( 30 );
         $provider_stats = Vcai_Logger::get_provider_stats();
+
+        wp_enqueue_script( 'vcai-logs-charts', VCAI_PLUGIN_URL . 'assets/js/logs-charts.js', [ 'chartjs' ], VCAI_VERSION, true );
+        wp_localize_script( 'vcai-logs-charts', 'vcai_logs_data', [
+            'daily'    => $daily_stats,
+            'provider' => $provider_stats,
+            'i18n'     => [
+                'calls'  => __( 'Chiamate', 'vcolonna-ai-assistant' ),
+                'tokens' => __( 'Token', 'vcolonna-ai-assistant' ),
+            ],
+        ] );
+
         require_once VCAI_PLUGIN_DIR . 'templates/logs-page.php';
     }
 
@@ -470,42 +470,4 @@ class Vcai_Admin {
         wp_send_json_success( [ 'alt_text' => $alt_text ] );
     }
 
-    /**
-     * Renderizza la pagina Componenti
-     */
-    public function render_components_page() {
-        $components = Vcai_Components::get_all();
-        require_once VCAI_PLUGIN_DIR . 'templates/components-page.php';
-    }
-
-    /**
-     * AJAX: toggle stato componente
-     */
-    public function ajax_toggle_component() {
-        check_ajax_referer( 'vcai_nonce', 'nonce' );
-        if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( 'Permessi insufficienti.' );
-
-        $slug   = sanitize_text_field( wp_unslash( $_POST['slug'] ?? '' ) );
-        $status = sanitize_text_field( wp_unslash( $_POST['status'] ?? '' ) );
-        if ( ! in_array( $status, [ 'active', 'inactive' ] ) ) wp_send_json_error( 'Stato non valido.' );
-
-        if ( $slug === '__all__' ) {
-            Vcai_Components::deactivate_all();
-        } else {
-            Vcai_Components::set_status( $slug, $status );
-        }
-        wp_send_json_success( 'Stato aggiornato.' );
-    }
-
-    /**
-     * AJAX: elimina componente
-     */
-    public function ajax_delete_component() {
-        check_ajax_referer( 'vcai_nonce', 'nonce' );
-        if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( 'Permessi insufficienti.' );
-
-        $slug = sanitize_text_field( wp_unslash( $_POST['slug'] ?? '' ) );
-        Vcai_Components::delete( $slug );
-        wp_send_json_success( 'Componente eliminato.' );
-    }
 }
