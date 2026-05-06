@@ -83,6 +83,14 @@ class Vcai_OpenAI extends Vcai_API_Connector {
             $response = $this->http_post( $this->get_api_base(), $body, $this->auth_headers() );
 
             if ( ! $response['success'] ) {
+                // Se un'azione è già stata eseguita, restituisci il suo risultato anziché l'errore
+                if ( $last_action ) {
+                    $fallback = $last_action['result']['message'] ?? 'Operazione completata.';
+                    Vcai_Logger::log( $this->get_provider_name(), $total_pt, $total_ct, 'success' );
+                    $result = $this->format_response( $fallback, $total_pt, $total_ct );
+                    $result['action_taken'] = $last_action;
+                    return $result;
+                }
                 Vcai_Logger::log( $this->get_provider_name(), $total_pt, $total_ct, 'error', $response['error'] );
                 return $this->format_error( $response['error'], $response['code'] );
             }
@@ -109,7 +117,7 @@ class Vcai_OpenAI extends Vcai_API_Connector {
                 $tool_args = json_decode( $tc['function']['arguments'], true ) ?? [];
                 $tool_result = Vcai_Tools::execute( $tool_name, $tool_args );
 
-                if ( in_array( $tool_name, [ 'create_post', 'update_post', 'delete_post', 'create_custom_post', 'update_custom_post', 'moderate_comment', 'reply_comment', 'update_site_settings', 'create_user', 'create_product', 'add_menu_item', 'create_component' ] ) ) {
+                if ( in_array( $tool_name, [ 'create_post', 'update_post', 'delete_post', 'create_custom_post', 'update_custom_post', 'moderate_comment', 'reply_comment', 'update_site_settings', 'create_product', 'add_menu_item' ] ) ) {
                     $last_action = [ 'tool' => $tool_name, 'result' => $tool_result ];
                 }
 
