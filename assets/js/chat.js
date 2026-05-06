@@ -39,13 +39,11 @@ jQuery(function ($) {
         reply_comment:          '💬 Risposta pubblicata',
         update_site_settings:   '⚙️ Impostazioni aggiornate',
         get_users:              '👥 Utenti recuperati',
-        create_user:            '👤 Utente creato',
         get_products:           '🛒 Prodotti recuperati',
         create_product:         '🛒 Prodotto creato',
         get_orders:             '📦 Ordini recuperati',
         get_menus:              '📋 Menu recuperati',
         add_menu_item:          '➕ Voce menu aggiunta',
-        create_component:       '🧩 Componente creato',
     };
 
     restoreSession();
