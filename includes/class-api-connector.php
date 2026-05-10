@@ -50,46 +50,52 @@ abstract class Vcai_API_Connector {
     /**
      * Esegue una chiamata HTTP con streaming — legge la risposta riga per riga
      * e chiama $callback per ogni chunk di testo.
+     * Usa cURL con CURLOPT_WRITEFUNCTION per compatibilità con tutti gli hosting.
      */
     protected function http_stream( string $url, array $body, array $headers, callable $callback ): array {
         $default_headers = [ 'Content-Type' => 'application/json' ];
         $all_headers = array_merge( $default_headers, $headers );
 
-        // Costruisci header stringa per stream_context
-        $header_str = '';
+        $curl_headers = [];
         foreach ( $all_headers as $k => $v ) {
-            $header_str .= "$k: $v\r\n";
+            $curl_headers[] = "$k: $v";
         }
 
-        $context = stream_context_create( [
-            'http' => [
-                'method'  => 'POST',
-                'header'  => $header_str,
-                'content' => wp_json_encode( $body ),
-                'timeout' => $this->timeout,
-                'ignore_errors' => true,
-            ],
-            'ssl' => [
-                'verify_peer' => true,
-            ],
-        ] );
+        $ch = curl_init( $url ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_init -- streaming requires cURL WRITEFUNCTION callback, not available via WP HTTP API
+        curl_setopt( $ch, CURLOPT_POST, true ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt
+        curl_setopt( $ch, CURLOPT_POSTFIELDS, wp_json_encode( $body ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt
+        curl_setopt( $ch, CURLOPT_HTTPHEADER, $curl_headers ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt
+        curl_setopt( $ch, CURLOPT_RETURNTRANSFER, false ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt
+        curl_setopt( $ch, CURLOPT_TIMEOUT, $this->timeout ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt
+        curl_setopt( $ch, CURLOPT_SSL_VERIFYPEER, true ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt
 
-        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- streaming from API requires fopen with stream context
-        $stream = @fopen( $url, 'r', false, $context );
-        if ( ! $stream ) {
-            return [ 'success' => false, 'error' => 'Impossibile connettersi all\'API.' ];
-        }
+        $buffer = '';
+        curl_setopt( $ch, CURLOPT_WRITEFUNCTION, function( $ch, $data ) use ( $callback, &$buffer ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt
+            $buffer .= $data;
+            while ( ( $pos = strpos( $buffer, "\n" ) ) !== false ) {
+                $line = substr( $buffer, 0, $pos + 1 );
+                $buffer = substr( $buffer, $pos + 1 );
+                $callback( $line );
+                if ( ob_get_level() ) ob_flush();
+                flush();
+            }
+            return strlen( $data );
+        } );
 
-        // Leggi riga per riga
-        while ( ! feof( $stream ) ) {
-            $line = fgets( $stream );
-            if ( $line === false ) break;
-            $callback( $line );
+        curl_exec( $ch ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_exec
+        $error = curl_error( $ch ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_error
+        curl_close( $ch ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_close
+
+        // Processa eventuale contenuto rimasto nel buffer
+        if ( $buffer !== '' ) {
+            $callback( $buffer );
             if ( ob_get_level() ) ob_flush();
             flush();
         }
-        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- closing API stream
-        fclose( $stream );
+
+        if ( $error ) {
+            return [ 'success' => false, 'error' => 'Errore connessione: ' . $error ];
+        }
 
         return [ 'success' => true ];
     }
